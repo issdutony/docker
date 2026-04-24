@@ -14,7 +14,7 @@ services:
       # 告訴 Jenkins 系統內部的 Docker CLI 連向我們剛剛架設的 docker-daemon 的 2376 port
       - DOCKER_HOST=tcp://docker-daemon:2376
       # [若改用自簽憑證] 指定 Jenkins 讀取 client 憑證的路徑，因為手動產生的資料夾內直含這些 pem 檔，所以用 /certs
-      - DOCKER_CERT_PATH=/certs
+      - DOCKER_CERT_PATH=/certs/client
       # 啟用 TLS 確認，1 代表 True
       - DOCKER_TLS_VERIFY=1
       # 告訴 Jenkins 內部路徑改了

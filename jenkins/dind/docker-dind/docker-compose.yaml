@@ -22,15 +22,15 @@ services:
       - --tlskey=/certs/server-key.pem
 
     volumes:
-      # [若改用自簽憑證] 直接將主機上我們建立的 custom-certs 資料夾掛載進容器內的 /certs
-      - /dind/jenkins_certs/server:/certs:ro
       # 持續性儲存 Jenkins 組態資料
       # 注意：這裡改為直接掛載主機的資料夾，避免使用 named volume 時在 DinD 中遇到找不到 volumes 的問題
       # chown 1000:1000 是為了確保 Jenkins 容器內的 jenkins 用戶（通常 UID 1000）對這個資料夾有適當的讀寫權限
-      - /var/jenkins_home:/var/jenkins_home
+      - /opt/jenkins_home:/var/jenkins_home
+      # [若改用自簽憑證] 直接將主機上我們建立的 custom-certs 資料夾掛載進容器內的 /certs
+      - /opt/jenkins_cert/server:/certs:ro
 
     # networks:
-    #   - vm-network
+    #   - rd-lab-network
 
     expose:
       # 分享預設的安全 TLS port，讓在 vm-network 的 Jenkins 可以存取
@@ -38,5 +38,5 @@ services:
 
 networks:
   default:
-    name: vm-network
+    name: rd-lab-network
     external: true

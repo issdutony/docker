@@ -1,6 +1,13 @@
 # Jenkins
 
-## 1. Environment
+## 1. Docker Image
+
+- rebuild
+    - from : `jenkins/jenkins:lts-jdk21`
+    - to : `rd/jenkins:lts-jdk21`
+        - [`jenkins-server/Dockerfile`](jenkins-server/Dockerfile)
+
+## 2. Environment
 
 - JENKINS_HOME (default : `/var/jenkins_home`) : `/opt/jenkins_home`
 - DOCKER_TLS_CERTDIR (default : `/certs`) : `/opt/jenkins_cert`
@@ -8,69 +15,36 @@
 - CACHE_DIR : `/home/jenkins/cache`
 - SRC_DIR : `/home/jenkins/src`
 
-```yaml
-name: jenkins
+## 3. Docker Compose
 
-services:
-  jenkins:
-    image: rd/jenkins:lts-jdk21
+- [`jenkins-server/docker-compose.yaml`](jenkins-server/docker-compose.yaml)
 
-    container_name: jenkins
-    hostname: jenkins
-
-    restart: always
-
-    environment:
-      - TZ=Asia/Taipei # 設定時區環境變數
-      # 告訴 Jenkins 系統內部的 Docker CLI 連向我們剛剛架設的 docker-daemon 的 2376 port
-      - DOCKER_HOST=tcp://docker-daemon:2376
-      # [若改用自簽憑證] 指定 Jenkins 讀取 client 憑證的路徑，因為手動產生的資料夾內直含這些 pem 檔，所以用 /certs
-      - DOCKER_CERT_PATH=/certs
-      # 啟用 TLS 確認，1 代表 True
-      - DOCKER_TLS_VERIFY=1
-      # 告訴 Jenkins 內部路徑改了
-      # - JENKINS_HOME=/opt/jenkins_home
-
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /opt/jenkins_home:/var/jenkins_home
-      - /opt/jenkins_cert/client:/certs/client:ro
-
-    ports:
-      - "8080:8080"
-      - "50000:50000"
-
-    user: "jenkins"
-
-    group_add:
-      - "${DOCKER_GID:-999}"
-
-networks:
-  default:
-    name: vm-network
-    external: true
-```
-
-## 2. Plugins
+## 4. Plugins
 
 - Docker
 - Docker Pipeline
 - Lockable Resources
 - Pipeline Graph Analysis
+- Pipeline Stage View
 - Locale
 
 # Jenkins DooD Steps
 
 ## 1. Image
 
-- jenkins/jenkins : lts-jdk21
-- jenkins/inbound-agent : latest-jdk21
+- rebuild
+    - from : `jenkins/inbound-agent:latest-jdk21`
+    - to : `rd/inbound-agent:latest-jdk21`
+        - [`dood/jenkins-agent/Dockerfile`](dood/jenkins-agent/Dockerfile)
 
-## 2. Steps
+## 2. Jenkins Setting
 
-- Create Path : 
-    - /home/jenkins/cache
-    - /home/jenkins/src
+- Create Path on Docker Engine Host:
+
+    ```bash
+    sudo mkdir -p /home/jenkins/cache
+    sudo mkdir -p /home/jenkins/src
+    ```
 
 - Clouds
     - Cloud name : `dood-cloud`
@@ -78,221 +52,96 @@ networks:
 
 - Docker Cloud details
     - Name : `dood-cloud`
-    - Docker Host URI : `unix : ///var/run/docker.sock`
+    - Docker Host URI : `unix:///var/run/docker.sock`
     - Enabled
 
 - Docker Agent templates
     - Labels : `dood-agent`
     - Enabled
-    - Docker Image : `rd/inbound-agent : latest-jdk21`
+    - Docker Image : [`rd/inbound-agent:latest-jdk21`](dood/jenkins-agent/Dockerfile)
     - Container Settings
         - Mounts : `type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock`
     - Remote File System Root : `/home/jenkins/agent`
     - Usage : `Only build jobs with label expressions matching this node`
     - Connect method : `Attach Docker container`
-        - EntryPoint Cmd : `/entrypoint.sh`
+        - EntryPoint Cmd : [`/entrypoint.sh`](dood/jenkins-agent/entrypoint.sh)
+    - Remove volumes
     - Pull strategy : `Never pull`
 
 ## 3. Pipeline Test
 
-```groovy
-pipeline {
-    agent {
-        label 'dood-agent'
-    }
-
-    options {
-        lock(resource: "lock-${JOB_NAME}")
-        disableConcurrentBuilds()
-        skipDefaultCheckout()
-        buildDiscarder(logRotator(numToKeepStr: '5', artifactNumToKeepStr: '5'))
-        // timestamps()
-    }
-
-    environment {
-        // git
-        TEZ_BRANCH = 'branch-0.10.5'
-        TEZ_REPO = 'https://github.com/apache/tez.git'
-
-        // Build
-        CACHE_DIR = "/home/jenkins/cache/${JOB_NAME}/.m2"
-        SRC_DIR = '/home/jenkins/src/tez'
-
-        /// SonarQube
-        SONAR_SERVER = 'sonar-server'
-        PROJECT_KEY = 'dood-debug'
-        PROJECT_NAME = 'Dood Debug'
-    }
-
-    stages {
-        stage('1. Checkout') {
-            steps {
-                script {
-                    def String dockerImage = 'alpine:latest'
-                    def String dockerArgs = [
-                        "-u root",
-                        "-v ${SRC_DIR}:${SRC_DIR}",
-                        "-v ${CACHE_DIR}:${CACHE_DIR}",
-                        "--network vm-network"
-                    ].join(' ')
-
-                    docker.image(dockerImage).inside(dockerArgs) {
-                        sh '''
-                        cp -a ${SRC_DIR}/. ${WORKSPACE}/
-                        chown -R 1000:1000 ${WORKSPACE} ${CACHE_DIR}
-                        chmod -R 755 ${CACHE_DIR}
-                        ls -la ${WORKSPACE}
-                        ls -la ${CACHE_DIR}
-                        '''
-                    }
-                }
-                // input message: '繼續執行？', ok: 'Continue'
-            }
-        }
-
-        stage('2. Build with Maven (skip tez-ui)') {
-            steps {
-                script {
-                    def String dockerImage = 'rd/maven:3.9.14-eclipse-temurin-21'
-                    def String dockerArgs = [
-                        "-v ${CACHE_DIR}:${CACHE_DIR}",
-                        "--network vm-network"
-                    ].join(' ')
-
-                    docker.image(dockerImage).inside(dockerArgs) {
-                        sh '''
-                        mvn clean package \
-                            -DskipTests=true \
-                            -Dmaven.javadoc.skip=true \
-                            -pl !tez-ui \
-                            -Dmaven.repo.local=${CACHE_DIR}
-                        '''
-                    }
-                }
-                // input message: '繼續執行？', ok: 'Continue'
-            }
-        }
-
-        stage('3. SonarQube Code Quality Analysis') {
-            steps {
-                script {
-                    def String dockerImage = 'rd/maven:3.9.14-eclipse-temurin-21'
-                    def String dockerArgs = [
-                        "-v ${CACHE_DIR}:${CACHE_DIR}",
-                        "--network vm-network"
-                    ].join(' ')
-
-                    docker.image(dockerImage).inside(dockerArgs) {
-                        withSonarQubeEnv("${SONAR_SERVER}") {
-                            sh '''
-                            mvn sonar:sonar \
-                                -Dsonar.projectKey="$PROJECT_KEY" \
-                                -Dsonar.projectName="$PROJECT_NAME" \
-                                -Dsonar.java.binaries=. \
-                                -pl !tez-ui \
-                                -Dmaven.repo.local=${CACHE_DIR}
-                            '''
-                        }
-                    }
-                }
-                // input message: '繼續執行？', ok: 'Continue'
-            }
-        }
-
-        stage('4. Quality Gate') {
-            steps {
-                timeout(time: 10, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-                // input message: '繼續執行？', ok: 'Continue'
-            }
-        }
-
-        stage('5. Archive Artifacts') {
-            steps {
-                script {
-                    sh '''
-                    for f in tez-dist/target/tez-*.tar.gz \
-                             tez-dist/target/tez-*-minimal.tar.gz \
-                             tez-ui/target/tez-*.war; do
-                        if [ -f "$f" ]; then
-                            sha256sum "$f" > "$f.sha256"
-                            echo "Generated SHA256 for $f"
-                        fi
-                    done
-                    '''
-
-                    // allowEmptyArchive:true 可防止找不到檔案時 Pipeline fail
-                    archiveArtifacts artifacts:'''
-                        tez-dist/target/tez-*.tar.gz,
-                        tez-dist/target/tez-*-minimal.tar.gz,
-                        tez-ui/target/tez*.war,
-                        **/target/*.sha256
-                    ''',
-                    fingerprint: true,
-                    allowEmptyArchive: true
-                }
-            }
-        }
-    }
-
-    post {
-        always {
-            script {
-                cleanWs(
-                    deleteDirs: true,
-                    disableDeferredWipeout: true
-                )
-                // cleanWs()
-            }
-        }
-    }
-}
-```
+- rebuild
+    - from : `maven:3.9.14-eclipse-temurin-21`
+    - to : `rd/maven:3.9.14-eclipse-temurin-21`
+        - [`maven/Dockerfile`](maven/Dockerfile)
+- pipeline
+    - [`dood/pipeline/jenkinsfile.dood.debug`](dood/pipeline/jenkinsfile.dood.debug)
 
 # Jenkins DinD Steps
 
-## Image
+## 1. Docker Image
 
-- docker : dind
-- docker : cli
+- rebuild
+    - from : `docker:dind`
+    - to : `rd/docker:dind`
+        - [`dind/docker-dind/Dockerfile`](dind/docker-dind/Dockerfile)
+    - container name : **`docker-daemon`**
 
-## Step
+## 2. Docker Compose
 
-## 建立自簽憑證
+- docker:dind
+    - [`dind/docker-dind/docker-compose.yaml`](dind/docker-dind/docker-compose.yaml)
 
-- generate-certs.sh
+## 3. 建立自簽憑證
 
-## Build Image
+- [`certs/generate-certs.sh`](certs/generate-certs.sh)
+- 將憑證放至 `/opt/jenkins_cert/client`
+    - key.pem
+    - cert.pem
+    - ca.pem
 
-- 在 docker-daemon 容器中 build docker : cli & maven image
-- 在 docker-daemon 容器中 mkdir -p /home/jenkins/agent
+## 4. Build Image
 
-## 匯入 TLS 到 Jenkins Credentials
+- 在 **docker-daemon** 中 rebuild
+    - from : `docker:cli`
+    - to : `rd/docker:cli`
+        - [`dind/docker-cli/Dockerfile`](dind/docker-cli/Dockerfile)
 
-1. `Manage Jenkins`
-2. `Credentials`
-3. `Global`
-4. `Add Credentials`
-5. Select a type of credential : `X.509 Client Certificate`
-6. Add X.509 Client Certificate : 
+- 在 **docker-daemon** 中 rebuild
+    - from : `maven:3.9.14-eclipse-temurin-21`
+    - to : `rd/maven:3.9.14-eclipse-temurin-21`
+        - [`maven/Dockerfile`](maven/Dockerfile)
+
+## 5. Jenkins Setting
+
+### 匯入 TLS 到 Jenkins Credentials
+
+1. `Manage Jenkins` > `Credentials` > `Global` > `Add Credentials`
+
+- Select a type of credential : `X.509 Client Certificate`
+- Add X.509 Client Certificate :
     - Scope : `Global (Jenkins, nodes, items, all child items, etc)`
     - Client Key : `key.pem`
     - Client Certificate : `cert.pem`
     - Server CA Certificate : `ca.pem`
     - ID : `dind-client-certs`
 
-## 設定 Docker Cloud
+### 設定 Docker Cloud
 
-- Create Path in docker-daemon : 
-    - /home/jenkins/cache
-    - /home/jenkins/src
+- Create Path on **docker-daemon** :
+
+    ```bash
+    sudo mkdir -p /home/jenkins/agent
+    sudo mkdir -p /home/jenkins/cache
+    sudo mkdir -p /home/jenkins/src
+    ```
+
 - Clouds
     - Cloud name : `dind-cloud`
     - Type : `Docker`
 - Docker Cloud details
     - Name : `dind-cloud`
-    - Docker Host URI : `tcp : //docker-daemon : 2376`
+    - Docker Host URI : `tcp://docker-daemon:2376`
     - Server credentials : `dind-client-certs`
     - Enabled
 - Docker Agent templates
@@ -300,7 +149,7 @@ pipeline {
     - Enabled
     - Docker Image : `rd/docker : cli`
     - Container Settings
-        - Mounts : 
+        - Mounts :
         ```
         type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock
         type=bind,source=/home/jenkins/agent,target=/home/jenkins/agent

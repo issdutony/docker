@@ -6,6 +6,7 @@
 
 # 1. 建立並進入憑證存放的資料夾
 mkdir -p /opt/jenkins_cert && cd /opt/jenkins_cert
+mkdir client server
 
 # ----------------------------------------------------
 # A. 建立 CA (Certificate Authority) 根憑證
@@ -60,6 +61,10 @@ rm -v client.csr server.csr extfile.cnf extfile-client.cnf
 # 為了安全考量，將私鑰權限設定為唯讀
 chmod -v 0400 ca-key.pem key.pem server-key.pem
 chmod -v 0444 ca.pem server-cert.pem cert.pem
+
+mv key.pem cert.pem client/
+mv server-key.pem server-cert.pem server/
+cp ca.pem client/ca.pem server/ca.pem
 
 # 【掛載權限重點】
 # 因為官方 Jenkins Container 執行程序的使用者身分 (UID) 預設為 1000：
