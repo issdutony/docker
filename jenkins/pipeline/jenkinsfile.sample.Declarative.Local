@@ -1,0 +1,146 @@
+pipeline {
+    agent {
+        label 'docker-agent'
+    }
+
+    options {
+        lock(resource: "lock-${JOB_NAME}")
+        disableConcurrentBuilds()
+        skipDefaultCheckout()
+        buildDiscarder(logRotator(numToKeepStr: '5', artifactNumToKeepStr: '5'))
+        timestamps()
+    }
+
+    environment {
+        TEZ_BRANCH = 'branch-0.10.5'
+        TEZ_REPO = 'https://github.com/apache/tez.git'
+        TEZ_SRC = '/home/tony/project/tez'
+        SONAR_SERVER = 'SonarQube-Server'
+        PROJECT_KEY = 'jenkins-sample-declarative-local'
+        PROJECT_NAME = 'Jenkins Sample Declarative Local'
+    }
+
+    stages {
+        stage('1. Checkout') {
+            agent {
+                docker {
+                    image 'alpine:latest'
+                    args([
+                        '-u root',
+                        "-v ${TEZ_SRC}:/src/tez",
+                        "-v ${WORKSPACE}/.m2:/tmp/.m2",
+                        '--network rd-lab-network'
+                    ].join(' '))
+                    reuseNode true
+                }
+            }
+            steps {
+                sh '''
+                cp -r /src/tez/. ${WORKSPACE}/
+                chown -R 1000:1000 ${WORKSPACE} /tmp/.m2
+                chmod -R 755 /tmp/.m2
+                ls -la ${WORKSPACE}
+                ls -la /tmp
+                '''
+                nput message: '繼續執行？', ok: 'Continue'
+            }
+        }
+
+        stage('2. Build with Maven') {
+            agent {
+                docker {
+                    image 'rd-lab/maven:3.9.14-eclipse-temurin-21'
+                    args([
+                        "-v ${WORKSPACE}/.m2:/tmp/.m2",
+                        '--network rd-lab-network'
+                    ].join(' '))
+                    reuseNode true
+                }
+            }
+            steps {
+                sh 'ls -la /tmp'
+                // input message: '繼續執行？', ok: 'Continue'
+                sh '''
+                mvn clean package \
+                    -DskipTests=true \
+                    -Dmaven.javadoc.skip=true \
+                    -Dmaven.repo.local=/tmp/.m2 \
+                    -pl !tez-ui
+                '''
+            }
+        }
+
+        stage('3. SonarQube Code Quality Analysis') {
+            agent {
+                docker {
+                    image 'rd-lab/maven:3.9.14-eclipse-temurin-21'
+                    args([
+                        "-v ${WORKSPACE}/.m2:/tmp/.m2",
+                        '--network rd-lab-network'
+                    ].join(' '))
+                    reuseNode true
+                }
+            }
+            steps {
+                withSonarQubeEnv("${SONAR_SERVER}") {
+                    sh '''
+                    mvn sonar:sonar \
+                        -Dsonar.projectKey="$PROJECT_KEY" \
+                        -Dsonar.projectName="$PROJECT_NAME" \
+                        -Dsonar.java.binaries=. \
+                        -Dmaven.repo.local=/tmp/.m2 \
+                        -pl !tez-ui
+                    ls -lR ${WORKSPACE}/target
+                    '''
+                }
+            // input message: '繼續執行？', ok: 'Continue'
+            }
+        }
+
+        stage('4. Wait For Quality Gate') {
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('5. Archive Artifacts') {
+            steps {
+                script {
+                    sh '''
+                    for f in tez-dist/target/tez-*.tar.gz tez-dist/target/tez-*-minimal.tar.gz tez-ui/target/tez-*.war; do
+                        if [ -f "$f" ]; then
+                            sha256sum "$f" > "$f.sha256"
+                            echo "Generated SHA256 for $f"
+                        fi
+                    done
+                    '''
+                    // 如果某些檔案沒產生，allowEmptyArchive: true 可防止 Pipeline 變紅燈
+                    archiveArtifacts artifacts: '''
+                        tez-dist/target/tez-*.tar.gz,
+                        tez-dist/target/tez-*-minimal.tar.gz,
+                        tez-dist/target/*.sha256,
+                        tez-ui/target/tez*.war,
+                        tez-ui/target/*.sha256
+                    ''',
+                    fingerprint: true,
+                    allowEmptyArchive: true
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                cleanWs(
+                    deleteDirs: true,
+                    disableDeferredWipeout: true
+                )
+                // cleanWs()
+            }
+        }
+    }
+}
+

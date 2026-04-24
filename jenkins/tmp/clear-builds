@@ -1,0 +1,4 @@
+def jobName = "YourJobName"
+def job = Jenkins.instance.getItemByFullName(jobName)
+job.getBuilds().each { build -> build.delete() }
+job.updateNextBuildNumber(1) // 重置建置編號
