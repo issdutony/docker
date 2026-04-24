@@ -1,0 +1,150 @@
+pipeline {
+    agent {
+        label 'dood-agent'
+    }
+
+    options {
+        lock(resource: "lock-${JOB_NAME}")
+        disableConcurrentBuilds()
+        skipDefaultCheckout()
+        buildDiscarder(logRotator(numToKeepStr: '5', artifactNumToKeepStr: '5'))
+        // timestamps()
+    }
+
+    environment {
+        // git
+        TEZ_BRANCH = 'branch-0.10.5'
+        TEZ_REPO = 'https://github.com/apache/tez.git'
+
+        // Build
+        CACHE_DIR = "/home/jenkins/cache/${JOB_NAME}/.m2"
+        SRC_DIR = '/home/jenkins/src/tez'
+
+        /// SonarQube
+        SONAR_SERVER = 'sonar-server'
+        PROJECT_KEY = 'dood-debug'
+        PROJECT_NAME = 'Dood Debug'
+    }
+
+    stages {
+        stage('1. Checkout') {
+            steps {
+                script {
+                    def String dockerImage = 'alpine:latest'
+                    def String dockerArgs = [
+                        "-u root",
+                        "-v ${SRC_DIR}:${SRC_DIR}",
+                        "-v ${CACHE_DIR}:${CACHE_DIR}",
+                        "--network vm-network"
+                    ].join(' ')
+
+                    docker.image(dockerImage).inside(dockerArgs) {
+                        sh '''
+                        cp -a ${SRC_DIR}/. ${WORKSPACE}/
+                        chown -R 1000:1000 ${WORKSPACE} ${CACHE_DIR}
+                        chmod -R 755 ${CACHE_DIR}
+                        '''
+                    }
+                }
+                // input message: '繼續執行？', ok: 'Continue'
+            }
+        }
+
+        stage('2. Build with Maven (skip tez-ui)') {
+            steps {
+                script {
+                    def String dockerImage = 'rd/maven:3.9.14-eclipse-temurin-21'
+                    def String dockerArgs = [
+                        "-v ${CACHE_DIR}:${CACHE_DIR}",
+                        "--network vm-network"
+                    ].join(' ')
+
+                    docker.image(dockerImage).inside(dockerArgs) {
+                        sh '''
+                        mvn clean package \
+                            -DskipTests=true \
+                            -Dmaven.javadoc.skip=true \
+                            -pl !tez-ui \
+                            -Dmaven.repo.local=${CACHE_DIR}
+                        '''
+                    }
+                }
+                // input message: '繼續執行？', ok: 'Continue'
+            }
+        }
+
+        stage('3. SonarQube Code Quality Analysis') {
+            steps {
+                script {
+                    def String dockerImage = 'rd/maven:3.9.14-eclipse-temurin-21'
+                    def String dockerArgs = [
+                        "-v ${CACHE_DIR}:${CACHE_DIR}",
+                        "--network vm-network"
+                    ].join(' ')
+
+                    docker.image(dockerImage).inside(dockerArgs) {
+                        withSonarQubeEnv("${SONAR_SERVER}") {
+                            sh '''
+                            mvn sonar:sonar \
+                                -Dsonar.projectKey="$PROJECT_KEY" \
+                                -Dsonar.projectName="$PROJECT_NAME" \
+                                -Dsonar.java.binaries=. \
+                                -pl !tez-ui \
+                                -Dmaven.repo.local=${CACHE_DIR}
+                            '''
+                        }
+                    }
+                }
+                // input message: '繼續執行？', ok: 'Continue'
+            }
+        }
+
+        stage('4. Quality Gate') {
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+                // input message: '繼續執行？', ok: 'Continue'
+            }
+        }
+
+        stage('5. Archive Artifacts') {
+            steps {
+                script {
+                    sh '''
+                    for f in tez-dist/target/tez-*.tar.gz \
+                             tez-dist/target/tez-*-minimal.tar.gz \
+                             tez-ui/target/tez-*.war; do
+                        if [ -f "$f" ]; then
+                            sha256sum "$f" > "$f.sha256"
+                            echo "Generated SHA256 for $f"
+                        fi
+                    done
+                    '''
+
+                    // allowEmptyArchive:true 可防止 Pipeline fail
+                    archiveArtifacts artifacts:'''
+                        tez-dist/target/tez-*.tar.gz,
+                        tez-dist/target/tez-*-minimal.tar.gz,
+                        tez-ui/target/tez*.war,
+                        **/target/*.sha256
+                    ''',
+                    fingerprint: true,
+                    allowEmptyArchive: true
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                cleanWs(
+                    deleteDirs: true,
+                    disableDeferredWipeout: true
+                )
+                // cleanWs()
+            }
+        }
+    }
+}

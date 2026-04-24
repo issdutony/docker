@@ -1,0 +1,47 @@
+name: jenkins
+
+services:
+  jenkins:
+    image: rd/jenkins:lts-jdk21
+
+    container_name: jenkins
+    hostname: jenkins
+
+    restart: always
+
+    environment:
+      - TZ=Asia/Taipei # 設定時區環境變數
+      # 告訴 Jenkins 系統內部的 Docker CLI 連向我們剛剛架設的 docker-daemon 的 2376 port
+      - DOCKER_HOST=tcp://docker-daemon:2376
+      # [若改用自簽憑證] 指定 Jenkins 讀取 client 憑證的路徑，因為手動產生的資料夾內直含這些 pem 檔，所以用 /certs
+      - DOCKER_CERT_PATH=/certs
+      # 啟用 TLS 確認，1 代表 True
+      - DOCKER_TLS_VERIFY=1
+      # 告訴 Jenkins 內部路徑改了
+      # - JENKINS_HOME=/opt/jenkins_home
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/jenkins_home:/var/jenkins_home
+      - /opt/jenkins_cert/client:/certs/client:ro
+
+    # networks:
+    #   - vm-network
+
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+
+    user: "jenkins"
+
+    group_add:
+      - "${DOCKER_GID:-999}"
+
+# volumes:
+#   jenkins_home:
+#     name: jenkins_home
+
+networks:
+  default:
+    name: rd-lab-network
+    external: true

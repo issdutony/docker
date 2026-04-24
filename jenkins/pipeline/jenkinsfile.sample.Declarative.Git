@@ -1,0 +1,111 @@
+pipeline {
+    agent { 
+        label "docker-agent"
+    }
+
+    options {
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: "5", artifactNumToKeepStr: "5"))
+        timestamps()
+    }
+    
+    environment {
+        TEZ_BRANCH = "branch-0.10.5"
+        TEZ_REPO   = "https://github.com/apache/tez.git"
+        SONAR_SERVER_NAME = "SonarQube-Server" 
+        PROJECT_KEY  = "apache-tez-declarative"
+        PROJECT_NAME = "Apache Tez Declarative"
+    }
+
+    stages {
+        stage("1. Checkout") {
+            steps {
+                git branch: "${TEZ_BRANCH}", url: "${TEZ_REPO}"
+            }
+        }
+
+        stage("2. Build with Maven (skip tez-ui)") {
+            agent {
+                docker {
+                    image "tony/maven:3.9.14-eclipse-temurin-21"
+                    args([
+                        "-u root",
+                        "-v $HOME/${env.JOB_NAME}/.m2:/root/.m2",
+                        "--network nginx-proxy-network"
+                    ].join(" "))
+                    reuseNode true
+                }
+            }
+            steps {
+                sh 'mvn clean package -DskipTests=true -Dmaven.javadoc.skip=true -pl !tez-ui'
+            }
+        }
+
+        stage("3. SonarQube Code Quality Analysis") {
+            agent {
+                docker {
+                    image "tony/maven:3.9.14-eclipse-temurin-21"
+                    args([
+                        "-u root",
+                        "-v $HOME/${env.JOB_NAME}/.m2:/root/.m2",
+                        "--network nginx-proxy-network"
+                    ].join(" "))
+                    reuseNode true
+                }
+            }
+            steps {
+                withSonarQubeEnv("SonarQube-Server") {
+                    sh '''
+                    mvn sonar:sonar \
+                        -Dsonar.projectKey="$PROJECT_KEY" \
+                        -Dsonar.projectName="$PROJECT_NAME Analysis" \
+                        -Dsonar.java.binaries=.
+                    '''
+                    sh 'chown -R 1000:1000 .'
+                }
+            }
+        }
+
+        stage("4. Quality Gate") {
+            steps {
+                timeout(time: 10, unit: "MINUTES") {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage("5. Archive Artifacts") {
+            steps {
+                script {
+                    sh '''
+                    for f in tez-dist/target/tez-*.tar.gz tez-dist/target/tez-*-minimal.tar.gz tez-ui/target/*.war; do
+                        if [ -f "$f" ]; then
+                            sha256sum "$f" > "$f.sha256"
+                            echo "Generated SHA256 for $f"
+                        fi
+                    done
+                    '''
+
+                    archiveArtifacts artifacts: '''
+                        tez-dist/target/tez-*.tar.gz,
+                        tez-dist/target/tez-*-minimal.tar.gz,
+                        tez-ui/target/*.war,
+                        **/target/*.sha256
+                    ''',
+                    fingerprint: true,
+                    allowEmptyArchive: false
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                // 清理 root 檔案權限
+                sh 'docker run --rm -v ${WORKSPACE}:/ws -w /ws alpine chmod -R 777 .'
+                cleanWs()
+            }
+        }
+    }
+}

@@ -1,0 +1,9 @@
+def jobName = "Apache-Tez"
+def buildNumber = 5
+def job = Jenkins.instance.getItemByFullName(jobName)
+def build = job.getBuildByNumber(buildNumber)
+
+if (build && build.isBuilding()) {
+    build.doStop()
+    println "已強制停止工作：${jobName} #${buildNumber}"
+}

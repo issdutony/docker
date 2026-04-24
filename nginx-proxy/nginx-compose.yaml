@@ -1,0 +1,32 @@
+name: lab
+
+services:
+  nginx-proxy:
+    image: nginx:latest # 使用最新的官方 Nginx 映像檔作為基礎
+    hostname: nginx-proxy
+    container_name: nginx-proxy # 幫容器取一個易懂的名稱
+    ports:
+      - "80:80" # Port Mapping: 將主機(Host)的 80 port 映射綁定到容器內的 80 port
+      - "443:443" # 備註：若您有配置 SSL/TLS 憑證，需一併將 443 映射出來
+    volumes:
+      - nginx-proxy-conf:/etc/nginx:ro
+      # 將本地端的設定檔掛載進入容器中，並覆蓋掉 Nginx 預設的設定配置
+      # [主機上的檔案路徑]:[容器內的檔案路徑]:[讀寫權限 (ro 代表 Read-Only 唯讀)]
+      # - nginx-proxy-conf:/etc/nginx/conf.d:ro
+      # [新增] 掛載憑證存放目錄：將主機端的 `./certs` 目錄映射入容器中的 `/etc/nginx/certs`
+      # 權限設為唯讀 (:ro)，以避免 Nginx 意外修改到私有密鑰檔案
+      # - nginx-proxy-cert:/etc/nginx/cert:ro
+    networks:
+      # 將 Nginx 加入下方自定義的 Bridge 網路中，使其能透過內部 DNS 與後端溝通
+      - nginx-proxy-network
+
+volumes:
+  nginx-proxy-conf:
+    name: nginx-proxy-conf
+  # nginx-proxy-cert:
+  #   name: nginx-proxy-cert
+
+networks:
+  nginx-proxy-network:
+    name: nginx-proxy-network
+    driver: bridge

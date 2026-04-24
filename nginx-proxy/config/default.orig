@@ -1,0 +1,114 @@
+server {
+    listen       80;
+    server_name  localhost;
+
+    #access_log  /var/log/nginx/host.access.log  main;
+
+    location / {
+        root   /usr/share/nginx/html;
+        index  index.html index.htm;
+    }
+
+    #error_page  404              /404.html;
+
+    # redirect server error pages to the static page /50x.html
+    #
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   /usr/share/nginx/html;
+    }
+
+    # proxy the PHP scripts to Apache listening on 127.0.0.1:80
+    #
+    #location ~ \.php$ {
+    #    proxy_pass   http://127.0.0.1;
+    #}
+
+    # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+    #
+    #location ~ \.php$ {
+    #    root           html;
+    #    fastcgi_pass   127.0.0.1:9000;
+    #    fastcgi_index  index.php;
+    #    fastcgi_param  SCRIPT_FILENAME  /scripts$fastcgi_script_name;
+    #    include        fastcgi_params;
+    #}
+
+    # deny access to .htaccess files, if Apache's document root
+    # concurs with nginx's one
+    #
+    #location ~ /\.ht {
+    #    deny  all;
+    #}
+
+    return 301 https://$host$request_uri;
+}
+
+server {
+    # 監聽 443 port，並啟用 ssl 模式
+    listen 443 ssl;
+
+    # 伺服器名稱
+    server_name localhost;
+
+    # 憑證檔案的絕對路徑 (這裡是容器內部的路徑)
+    ssl_certificate /etc/nginx/cert/server.crt;
+    # 憑證私鑰檔案的絕對路徑 (這裡是容器內部的路徑)
+    ssl_certificate_key /etc/nginx/cert/server.key;
+    # 設定支援的 TLS 協定版本 (建議停用較舊且不安全的 TLSv1 和 TLSv1.1)
+    ssl_protocols TLSv1.2 TLSv1.3;
+    # 設定加密演算法優先順序，確保安全性
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    # 設定網站的根目錄與預設首頁檔
+    location / {
+        # 將網頁根目錄指向 Nginx 容器內部的預設網頁目錄
+        root   /usr/share/nginx/html;
+        # 設定預設讀取的 index 檔案
+        index  index.html index.htm;
+    }
+
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   /usr/share/nginx/html;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name jenkins.local;
+    # SSL 憑證設定
+    ssl_certificate /etc/nginx/cert/server.crt;
+    ssl_certificate_key /etc/nginx/cert/server.key;
+    # 【重要設定】允許較大的客戶端上傳檔案 (Jenkins 安裝外掛或上傳 artifact 需要)
+    # 預設 Nginx 只有 1M，會導致上傳失敗，這裡放大至 500 MB (可依需求調整)
+    client_max_body_size 500m;
+    location / {
+        # 【反向代理】指向 docker-compose 中的 jenkins 服務與其 Web UI Port (8080)
+        proxy_pass http://jenkins-dood:8080;
+        # ---------------- 基本的安全與路由標頭 ---------------- #
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # 【解決 Jenkins 警告標頭】 Jenkins 需要知道目前正確的連接埠與主機名稱
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        # ---------------- WebSocket 支援 ---------------- #
+        # Jenkins 儀表板與日誌輸出會使用 WebSocket 或長連線技術，必須啟用以下設定
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        # ---------------- 關閉緩存 ---------------- #
+        # Jenkins 是即時互動系統，關閉此兩項可避免 Nginx 囤積資料，加快 Console Output 即時回顯速度
+        proxy_buffering off;
+        proxy_request_buffering off;
+        # 延長超時時間 (某些老舊建置指令卡住不回傳輸出時，避免 Nginx 先判定 504 Timeout)
+        proxy_read_timeout 180;
+
+        # 解決 Jenkins CSRF Crumb 問題的關鍵
+        proxy_max_temp_file_size 0;
+        proxy_redirect http:// https://;
+    }
+}

@@ -1,0 +1,24 @@
+.dockerignore
+
+.env
+*.env
+
+pgdata/              # Postgres 資料
+mysql/               # MySQL 資料
+redis/               # Redis 資料
+data/                # 通用資料存放區
+*.db
+*.sqlite
+
+logs/
+*.log
+.cache/
+
+.DS_Store
+Thumbs.db
+.vscode/
+
+*.pem
+*.crt
+*.key
+token
