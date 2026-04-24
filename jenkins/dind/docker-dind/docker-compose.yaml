@@ -13,13 +13,15 @@ services:
 
     environment:
       # [若改用自簽憑證] 將其設為空字串，以關閉官方 dind 在背景自動產生 TLS 憑證的行為
-      - DOCKER_TLS_CERTDIR=""
+      - DOCKER_TLS_CERTDIR=
     command:
+      # - --host=unix:///var/run/docker.sock
+      - --host=tcp://docker-daemon:2376
       # [若改用自簽憑證] 透過命令列參數，明確指定我們手動建立的 TLS 憑證檔案位置
       - --tlsverify
-      - --tlscacert=/certs/ca.pem
-      - --tlscert=/certs/server-cert.pem
-      - --tlskey=/certs/server-key.pem
+      - --tlscacert=/certs/server/ca.pem
+      - --tlscert=/certs/server/server-cert.pem
+      - --tlskey=/certs/server/server-key.pem
 
     volumes:
       # 持續性儲存 Jenkins 組態資料
@@ -27,7 +29,7 @@ services:
       # chown 1000:1000 是為了確保 Jenkins 容器內的 jenkins 用戶（通常 UID 1000）對這個資料夾有適當的讀寫權限
       - /opt/jenkins_home:/var/jenkins_home
       # [若改用自簽憑證] 直接將主機上我們建立的 custom-certs 資料夾掛載進容器內的 /certs
-      - /opt/jenkins_cert/server:/certs:ro
+      - /opt/jenkins_cert/server:/certs/server:ro
 
     # networks:
     #   - rd-lab-network

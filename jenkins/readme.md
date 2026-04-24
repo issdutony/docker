@@ -10,7 +10,7 @@
 ## 2. Environment
 
 - JENKINS_HOME (default : `/var/jenkins_home`) : `/opt/jenkins_home`
-- DOCKER_TLS_CERTDIR (default : `/certs`) : `/opt/jenkins_cert`
+- DOCKER_TLS_CERTDIR (default : `/certs/client`) : `/opt/jenkins_cert/client`
 - AGENT_WORKDIR (default : `/home/jenkins/agent`) : `/home/jenkins/agent`
 - CACHE_DIR : `/home/jenkins/cache`
 - SRC_DIR : `/home/jenkins/src`
@@ -131,9 +131,9 @@
 - Create Path on **docker-daemon** :
 
     ```bash
-    sudo mkdir -p /home/jenkins/agent
-    sudo mkdir -p /home/jenkins/cache
-    sudo mkdir -p /home/jenkins/src
+    mkdir -p /home/jenkins/agent
+    mkdir -p /home/jenkins/cache
+    mkdir -p /home/jenkins/src
     ```
 
 - Clouds
@@ -147,7 +147,7 @@
 - Docker Agent templates
     - Labels : `dind-agent`
     - Enabled
-    - Docker Image : `rd/docker : cli`
+    - Docker Image : `rd/docker:cli`
     - Container Settings
         - Mounts :
         ```
@@ -162,120 +162,4 @@
 
 ## Pipeline Test
 
-```groovy
-pipeline {
-    agent {
-        label 'dind-agent'
-    }
-
-    options {
-        lock(resource: "lock-${JOB_NAME}")
-        disableConcurrentBuilds()
-        skipDefaultCheckout()
-        buildDiscarder(logRotator(numToKeepStr: '5', artifactNumToKeepStr: '5'))
-        // timestamps()
-    }
-
-    environment {
-        // git
-        TEZ_BRANCH = 'branch-0.10.5'
-        TEZ_REPO = 'https://github.com/apache/tez.git'
-
-        // Build
-        CACHE_DIR = "/home/jenkins/cache/${JOB_NAME}/.m2"
-        SRC_DIR = '/home/jenkins/src/tez'
-
-        /// SonarQube
-        SONAR_SERVER = 'sonar-server'
-        PROJECT_KEY = 'dind-debug'
-        PROJECT_NAME = 'Dind Debug'
-    }
-
-    stages {
-        stage('1. Checkout') {
-            steps {
-                script {
-                    def String dockerImage = 'rd/maven:3.9.14-eclipse-temurin-21'
-                    def String dockerArgs = [
-                        "-v ${SRC_DIR}:${SRC_DIR}",
-                        "-v ${CACHE_DIR}:${CACHE_DIR}",
-                        "--network host"
-                    ].join(' ')
-
-                    docker.image(dockerImage).inside(dockerArgs) {
-                        sh '''
-                        cp -a ${SRC_DIR}/. ${WORKSPACE}/
-                        '''
-
-                        input message: '繼續執行？', ok: 'Continue'
-
-                        sh '''
-                        mvn clean package \
-                            -DskipTests=true \
-                            -Dmaven.javadoc.skip=true \
-                            -pl !tez-ui \
-                            -Dmaven.repo.local=${CACHE_DIR}
-                        '''
-
-                        input message: '繼續執行？', ok: 'Continue'
-
-                        withSonarQubeEnv("${SONAR_SERVER}") {
-                            sh '''
-                            mvn sonar:sonar \
-                                -Dsonar.projectKey="$PROJECT_KEY" \
-                                -Dsonar.projectName="$PROJECT_NAME" \
-                                -Dsonar.java.binaries=. \
-                                -pl !tez-ui \
-                                -Dmaven.repo.local=${CACHE_DIR}
-                            '''
-                        }
-
-                        timeout(time: 10, unit: 'MINUTES') {
-                            waitForQualityGate abortPipeline: true
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('5. Archive Artifacts') {
-            steps {
-                script {
-                    sh '''
-                    for f in tez-dist/target/tez-*.tar.gz \
-                             tez-dist/target/tez-*-minimal.tar.gz \
-                             tez-ui/target/tez-*.war; do
-                        if [ -f "$f" ]; then
-                            sha256sum "$f" > "$f.sha256"
-                            echo "Generated SHA256 for $f"
-                        fi
-                    done
-                    '''
-
-                    // allowEmptyArchive:true 可防止找不到檔案時 Pipeline fail
-                    archiveArtifacts artifacts:'''
-                        tez-dist/target/tez-*.tar.gz,
-                        tez-dist/target/tez-*-minimal.tar.gz,
-                        tez-ui/target/tez*.war,
-                        **/target/*.sha256
-                    ''',
-                    fingerprint: true,
-                    allowEmptyArchive: true
-                }
-            }
-        }
-    }
-
-    post {
-        always {
-            script {
-                cleanWs(
-                    deleteDirs: true,
-                    disableDeferredWipeout: true
-                )
-                // cleanWs()
-            }
-        }
-    }
-}
-```
+- [`dind/pipeline/jenkinsfile.dind.debug`](dind/pipeline/jenkinsfile.dind.debug)
