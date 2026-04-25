@@ -2,77 +2,7 @@
 
 ## 1. Docker Compose
 
-```yaml
-name: jenkins
-
-services:
-    sonarqube:
-        image: sonarqube:community
-        hostname: sonarqube
-        container_name: sonarqube
-        restart: always
-        read_only: true
-        depends_on:
-            db:
-                condition: service_healthy
-        environment:
-            SONAR_JDBC_URL: jdbc:postgresql://db:5432/sonar
-            SONAR_JDBC_USERNAME: sonar
-            SONAR_JDBC_PASSWORD: sonar
-        volumes:
-            - sonarqube_data:/opt/sonarqube/data
-            - sonarqube_extensions:/opt/sonarqube/extensions
-            - sonarqube_logs:/opt/sonarqube/logs
-            - sonarqube_temp:/opt/sonarqube/temp
-        tmpfs:
-            - /tmp:size=256M,mode=1777
-        ports:
-            - "9000:9000"
-        networks:
-            - default
-    db:
-        image: postgres:18.3-alpine
-        healthcheck:
-            test:
-                [
-                    "CMD-SHELL",
-                    "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}",
-                ]
-            interval: 10s
-            timeout: 5s
-            retries: 5
-        hostname: sonarqube-db
-        container_name: sonarqube-db
-        restart: always
-        environment:
-            POSTGRES_USER: sonar
-            POSTGRES_PASSWORD: sonar
-            POSTGRES_DB: sonar
-        volumes:
-            - sonarqube_db:/var/lib/postgresql
-            # - sonarqube_db_data:/var/lib/postgresql/data
-        networks:
-            - default
-
-volumes:
-    sonarqube_data:
-        name: sonarqube_data
-    sonarqube_temp:
-        name: sonarqube_temp
-    sonarqube_extensions:
-        name: sonarqube_extensions
-    sonarqube_logs:
-        name: sonarqube_logs
-    sonarqube_db:
-        name: sonarqube_db
-    # sonarqube_db_data:
-    #   name: sonarqube_db_data
-
-networks:
-    default:
-        external: true # 使用既有網路
-        name: vm-network
-```
+[`sonarqube-compose.yaml`](sonarqube-compose.yaml)
 
 ## 2. SonarQube Setting
 
@@ -93,7 +23,7 @@ networks:
 
 - Administration > Configuration > Webhooks > Create
     - Name : `jenkins-webhook`
-    - URL : `http : //jenkins : 8080/sonarqube-webhook/`
+    - URL : `http://jenkins:8080/sonarqube-webhook/`
 
 ## 3. Jenkins Setting
 
@@ -108,7 +38,7 @@ networks:
 
 - Manage Jenkins > System > SonarQube servers > SonarQube installations
     - Name : `sonar-server`
-    - Server URL : `http : //sonarqube : 9000`
+    - Server URL : `http://sonarqube:9000`
     - Server authentication token : `sonar-tonken`
 
 - Manage Jenkins > Tools > SonarQube Scanner installations > Add SonarQube Scanner

@@ -61,5 +61,5 @@ volumes:
 
 networks:
   default:
-    external: true         # 告訴 Compose：這個網路是在外面建好的，請直接用
-    name: vm-network
+    external: true # 告訴 Compose：這個網路是在外面建好的，請直接用
+    name: rd-lab-network
