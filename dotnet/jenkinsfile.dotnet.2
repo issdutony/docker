@@ -31,22 +31,22 @@ pipeline {
                 // 'SonarQube' 是在 Jenkins System 裡所設定的 SonarQube 伺服器名稱
                 withSonarQubeEnv('SonarQube') {
                     sh '''
-                        # 1. 安裝 Java (SonarScanner 執行必備)
-                        apt-get update && apt-get install -y default-jre
+                    # 1. 安裝 Java (SonarScanner 執行必備)
+                    apt-get update && apt-get install -y default-jre
 
-                        # 2. 安裝 dotnet-sonarscanner CLI 工具
-                        dotnet tool install --global dotnet-sonarscanner
-                        export PATH="$PATH:/root/.dotnet/tools"
+                    # 2. 安裝 dotnet-sonarscanner CLI 工具
+                    dotnet tool install --global dotnet-sonarscanner
+                    export PATH="$PATH:/root/.dotnet/tools"
 
-                        # 3. 啟動 SonarQube 掃描階段 (Begin)
-                        dotnet sonarscanner begin /k:"${PROJECT_KEY}"
+                    # 3. 啟動 SonarQube 掃描階段 (Begin)
+                    dotnet sonarscanner begin /k:"${PROJECT_KEY}"
 
-                        # 4. 編譯與發佈 .NET Core Web App
-                        # 使用 publish 指令，將最終可執行的檔案與依賴統一輸出到 publish_output 目錄
-                        dotnet publish -c Release -o ./publish_output
+                    # 4. 編譯與發佈 .NET Core Web App
+                    # 使用 publish 指令，將最終可執行的檔案與依賴統一輸出到 publish_output 目錄
+                    dotnet publish -c Release -o ./publish_output
 
-                        # 5. 結束掃描並上傳分析報告到 SonarQube 伺服器 (End)
-                        dotnet sonarscanner end
+                    # 5. 結束掃描並上傳分析報告到 SonarQube 伺服器 (End)
+                    dotnet sonarscanner end
                     '''
                 }
             }

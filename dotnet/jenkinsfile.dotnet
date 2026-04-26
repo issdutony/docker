@@ -20,7 +20,7 @@ pipeline {
         stage('Restore') {
             steps {
                 script {
-                    def String dockerImage = 'mcr.microsoft.com/dotnet/sdk:10.0'
+                    def String dockerImage = 'rd/mcr.microsoft.com/dotnet/sdk:10.0'
                     def String dockerArgs = [
                         "-v ${SRC_DIR}:${SRC_DIR}",
                         "-v ${CACHE_DIR}:${CACHE_DIR}",
@@ -28,14 +28,16 @@ pipeline {
                     ].join(' ')
 
                     docker.image(dockerImage).inside(dockerArgs) {
-                        sh '''
-                        cp -a ${SRC_DIR}/. ${WORKSPACE}/
-                        dotnet clean ${PROJECT_PATH}
-                        dotnet restore ${PROJECT_PATH}
-                        dotnet build ${PROJECT_PATH} --configuration Release --no-restore
-                        dotnet test ${PROJECT_PATH} --configuration Release --no-restore
-                        dotnet publish ${PROJECT_PATH} --configuration Release --output ./publish
-                        '''
+                        withSonarQubeEnv('sonar-server') {
+                            sh '''
+                            cp -a ${SRC_DIR}/. ${WORKSPACE}/
+                            dotnet clean ${PROJECT_PATH}
+                            dotnet restore ${PROJECT_PATH}
+                            dotnet build ${PROJECT_PATH} --configuration Release --no-restore
+                            dotnet test ${PROJECT_PATH} --configuration Release --no-restore
+                            dotnet publish ${PROJECT_PATH} --configuration Release --output ./publish
+                            '''
+                        }
                     }
                 }
             }
