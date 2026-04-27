@@ -1,0 +1,10 @@
+FROM mcr.microsoft.com/dotnet/sdk:8.0
+
+RUN apt update && \
+    apt full-upgrade -y && \
+    apt install --no-install-recommends -y openjdk-17-jdk && \
+    dotnet tool install --global dotnet-sonarscanner && \
+    apt autopurge -y && apt clean && rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/* /var/tmp/* && \
+    <<EOF cat >> /etc/bash.bashrc
+export PATH="$PATH:/root/.dotnet/tools"
+EOF

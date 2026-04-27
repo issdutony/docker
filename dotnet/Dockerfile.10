@@ -8,6 +8,3 @@ RUN apt update && \
     <<EOF cat >> /etc/bash.bashrc
 export PATH="$PATH:/root/.dotnet/tools"
 EOF
-
-# ENV ENV="/root/.bashrc"
-
