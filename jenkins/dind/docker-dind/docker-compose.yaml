@@ -9,7 +9,12 @@ services:
     container_name: docker-daemon
     hostname: docker-daemon
 
-    privileged: true # DinD 執行必須開啟特權模式以操作核心功能
+    restart: unless-stopped
+
+    # DinD 需要以 root 身份運行以便管理 Docker 守護進程和容器
+    # user: root
+    # DinD 執行必須開啟特權模式以操作核心功能
+    privileged: true
 
     environment:
       # [若改用自簽憑證] 將其設為空字串，以關閉官方 dind 在背景自動產生 TLS 憑證的行為
@@ -34,10 +39,15 @@ services:
 
     # networks:
     #   - rd-lab-network
+    networks:
+      default:
+        aliases:
+          - docker
 
     expose:
       # 分享預設的安全 TLS port，讓在 vm-network 的 Jenkins 可以存取
       - "2376"
+
 volumes:
   docker-daemon_data:
     external: true
