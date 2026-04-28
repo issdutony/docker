@@ -30,6 +30,7 @@ services:
       - /opt/jenkins_home:/var/jenkins_home
       # [若改用自簽憑證] 直接將主機上我們建立的 custom-certs 資料夾掛載進容器內的 /certs
       - /opt/jenkins_cert/server:/certs/server:ro
+      - docker-daemon_data:/var/lib/docker
 
     # networks:
     #   - rd-lab-network
@@ -37,6 +38,9 @@ services:
     expose:
       # 分享預設的安全 TLS port，讓在 vm-network 的 Jenkins 可以存取
       - "2376"
+volumes:
+  docker-daemon_data:
+    external: true
 
 networks:
   default:
