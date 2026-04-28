@@ -2,7 +2,7 @@
 
 ## 1. Docker Compose
 
-[`sonarqube-compose.yaml`](sonarqube-compose.yaml)
+[`docker-compose.yaml`](docker-compose.yaml)
 
 ## 2. SonarQube Setting
 

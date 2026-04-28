@@ -22,6 +22,7 @@ services:
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      # 先在 host 上建立 /opt/jenkins_home 資料夾，並給予 Jenkins 使用者讀寫權限，這樣 Jenkins 就能在裡面存取資料了
       - /opt/jenkins_home:/var/jenkins_home
       - /opt/jenkins_cert/client:/certs/client:ro
 
