@@ -1,0 +1,7 @@
+# theme: jekyll-theme-minimal
+remote_theme: pages-themes/primer
+plugins:
+- jekyll-remote-theme
+title: Docker
+longtitle: 
+description: 
