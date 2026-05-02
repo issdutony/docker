@@ -1,6 +1,7 @@
 FROM docker:cli
 
-RUN apk add --no-cache openjdk21-jdk && \
+RUN apk upgrade --no-cache && \
+    apk add --no-cache openjdk21-jdk && \
     rm -rf /var/cache/apk/* && \
     <<EOF cat > /etc/profile.d/aliases.sh
 alias ll="ls -lAvF --color=auto"

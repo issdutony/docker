@@ -1,0 +1,56 @@
+name: lab
+
+services:
+  redmine-db:
+    image: postgres:18.3-alpine # 修正為已存在的穩定版本
+    container_name: redmine-db
+    hostname: redmine-db
+    restart: always
+    environment:
+      POSTGRES_DB: redmine
+      POSTGRES_USER: redmine
+      POSTGRES_PASSWORD: redminepassword
+    volumes:
+      - redmine-db:/var/lib/postgresql
+      - redmine-db-data:/var/lib/postgresql/data
+    networks:
+      - default
+
+  redmine:
+    image: redmine:6.1.2-alpine # 建議使用 6.0 穩定分支
+    container_name: redmine
+    hostname: redmine
+    restart: always
+    depends_on:
+      - redmine-db
+    environment:
+      REDMINE_DB_POSTGRES: redmine-db
+      REDMINE_DB_USERNAME: redmine
+      REDMINE_DB_PASSWORD: redminepassword
+      REDMINE_DB_DATABASE: redmine
+      REDMINE_RELATIVE_URL_ROOT: "" 
+    ports:
+      - 3000
+    volumes:
+      - redmine-files:/usr/src/redmine/files
+      - redmine-plugins:/usr/src/redmine/plugins
+      - redmine-themes:/usr/src/redmine/themes
+    networks:
+      - default
+
+volumes:
+  redmine-db:
+    name: redmine-db
+  redmine-db-data:
+    name: redmine-db-data
+  redmine-files:
+    name: redmine-files
+  redmine-plugins:
+    name: redmine-plugins
+  redmine-themes:
+    name: redmine-themes
+
+networks:
+  default:
+    external: true         # 告訴 Compose：這個網路是在外面建好的，請直接用
+    name: nginx-proxy-network

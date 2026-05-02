@@ -19,6 +19,7 @@ RUN apt update && \
     | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
     apt update && \
     apt install --no-install-recommends -y docker-ce-cli docker-compose-plugin && \
+    apt full-upgrade -y && \
     apt autopurge -y && apt clean && rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/* && \
     <<EOF cat >> /etc/bash.bashrc
 alias ll="ls -lAvF --time-style='+%Y-%m-%d %H:%M:%S' --group-directories-first --color=always"

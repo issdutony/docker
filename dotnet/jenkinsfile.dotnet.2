@@ -1,0 +1,79 @@
+pipeline {
+    // 指定由 dind-cloud 動態生成的 dind-agent 作為最外層的執行節點
+    agent {
+        label 'dind-agent'
+    }
+
+    environment {
+        // 設定您的 SonarQube 專案名稱 / Key
+        PROJECT_KEY = 'my-dotnet-webapp'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                // 從版本控制系統 (如 Git) 拉取原始碼
+                checkout scm
+            }
+        }
+
+        stage('Compile & SonarQube Scan') {
+            // 在 dind-agent 內部動態啟動微軟官方的 .NET SDK 容器
+            // reuseNode true 確保容器會掛載同一個 Workspace，才能看見剛拉取的程式碼
+            agent {
+                docker {
+                    image 'mcr.microsoft.com/dotnet/sdk:10.0' // 可依據您的專案修改版本
+                    reuseNode true
+                    args '-u root' // 使用 root 權限，允許使用 apt-get 安裝 Java
+                }
+            }
+            steps {
+                // 'SonarQube' 是在 Jenkins System 裡所設定的 SonarQube 伺服器名稱
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                    # 1. 安裝 Java (SonarScanner 執行必備)
+                    apt-get update && apt-get install -y default-jre
+
+                    # 2. 安裝 dotnet-sonarscanner CLI 工具
+                    dotnet tool install --global dotnet-sonarscanner
+                    export PATH="$PATH:/root/.dotnet/tools"
+
+                    # 3. 啟動 SonarQube 掃描階段 (Begin)
+                    dotnet sonarscanner begin /k:"${PROJECT_KEY}"
+
+                    # 4. 編譯與發佈 .NET Core Web App
+                    # 使用 publish 指令，將最終可執行的檔案與依賴統一輸出到 publish_output 目錄
+                    dotnet publish -c Release -o ./publish_output
+
+                    # 5. 結束掃描並上傳分析報告到 SonarQube 伺服器 (End)
+                    dotnet sonarscanner end
+                    '''
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                // 等待 SonarQube 伺服器透過 Webhook 回傳分析結果
+                // 如果沒有通過品質閘門 (例如 Bug 過多、覆蓋率過低等)，則中止並判定 Pipeline 失敗
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Archive') {
+            steps {
+                // 封存 publish 產生的檔案，變成 Jenkins Artifacts 供下載或後續部署階段使用
+                archiveArtifacts artifacts: 'publish_output/**/*', allowEmptyArchive: false
+            }
+        }
+    }
+
+    post {
+        always {
+            // 無論構建是成功、失敗還是被中斷，最後都強制清理工作區 (cleanws)
+            cleanWs()
+        }
+    }
+}

@@ -1,35 +1,11 @@
 # Portainer
 
-- [`portainer-compose.yaml`](portainer-compose.yaml)
+## Docker Compose
 
-```yaml
-services:
-    portainer:
-        image: portainer/portainer-ce:sts
+- [`docker-compose.yaml`](docker-compose.yaml)
 
-        container_name: portainer
-        hostname: portainer
+## Setting
 
-        restart: always
-
-        environment:
-            - TZ=Asia/Taipei # 設定時區環境變數
-
-        volumes:
-            - portainer_data:/data
-            - /var/run/docker.sock:/var/run/docker.sock
-            - /etc/localtime:/etc/localtime:ro
-            - /etc/timezone:/etc/timezone:ro
-
-        ports:
-            - 9443:9443
-            - 8000:8000 # Remove if you do not intend to use Edge Agents
-
-volumes:
-    portainer_data:
-        name: portainer_data
-
-networks:
-    default:
-        name: portainer_network
-```
+- Environment-related > Environments > local
+    - Name : `rd-lab`
+    - Public IP : `rd-docker`

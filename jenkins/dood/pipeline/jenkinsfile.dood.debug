@@ -35,7 +35,7 @@ pipeline {
                         "-u root",
                         "-v ${SRC_DIR}:${SRC_DIR}",
                         "-v ${CACHE_DIR}:${CACHE_DIR}",
-                        "--network vm-network"
+                        "--network rd-lab-network"
                     ].join(' ')
 
                     docker.image(dockerImage).inside(dockerArgs) {
@@ -56,7 +56,7 @@ pipeline {
                     def String dockerImage = 'rd/maven:3.9.14-eclipse-temurin-21'
                     def String dockerArgs = [
                         "-v ${CACHE_DIR}:${CACHE_DIR}",
-                        "--network vm-network"
+                        "--network rd-lab-network"
                     ].join(' ')
 
                     docker.image(dockerImage).inside(dockerArgs) {
@@ -79,7 +79,7 @@ pipeline {
                     def String dockerImage = 'rd/maven:3.9.14-eclipse-temurin-21'
                     def String dockerArgs = [
                         "-v ${CACHE_DIR}:${CACHE_DIR}",
-                        "--network vm-network"
+                        "--network rd-lab-network"
                     ].join(' ')
 
                     docker.image(dockerImage).inside(dockerArgs) {

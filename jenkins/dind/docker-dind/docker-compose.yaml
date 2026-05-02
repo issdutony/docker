@@ -9,34 +9,50 @@ services:
     container_name: docker-daemon
     hostname: docker-daemon
 
-    privileged: true # DinD 執行必須開啟特權模式以操作核心功能
+    restart: unless-stopped
+
+    # DinD 需要以 root 身份運行以便管理 Docker 守護進程和容器
+    # user: root
+    # DinD 執行必須開啟特權模式以操作核心功能
+    privileged: true
 
     environment:
       # [若改用自簽憑證] 將其設為空字串，以關閉官方 dind 在背景自動產生 TLS 憑證的行為
-      - DOCKER_TLS_CERTDIR=""
+      - DOCKER_TLS_CERTDIR=
     command:
+      # - --host=unix:///var/run/docker.sock
+      - --host=tcp://docker-daemon:2376
       # [若改用自簽憑證] 透過命令列參數，明確指定我們手動建立的 TLS 憑證檔案位置
       - --tlsverify
-      - --tlscacert=/certs/ca.pem
-      - --tlscert=/certs/server-cert.pem
-      - --tlskey=/certs/server-key.pem
+      - --tlscacert=/certs/server/ca.pem
+      - --tlscert=/certs/server/server-cert.pem
+      - --tlskey=/certs/server/server-key.pem
 
     volumes:
-      # [若改用自簽憑證] 直接將主機上我們建立的 custom-certs 資料夾掛載進容器內的 /certs
-      - /dind/jenkins_certs/server:/certs:ro
       # 持續性儲存 Jenkins 組態資料
       # 注意：這裡改為直接掛載主機的資料夾，避免使用 named volume 時在 DinD 中遇到找不到 volumes 的問題
       # chown 1000:1000 是為了確保 Jenkins 容器內的 jenkins 用戶（通常 UID 1000）對這個資料夾有適當的讀寫權限
-      - /var/jenkins_home:/var/jenkins_home
+      - /opt/jenkins_home:/var/jenkins_home
+      # [若改用自簽憑證] 直接將主機上我們建立的 custom-certs 資料夾掛載進容器內的 /certs
+      - /opt/jenkins_cert/server:/certs/server:ro
+      - docker-daemon_data:/var/lib/docker
 
     # networks:
-    #   - vm-network
+    #   - rd-lab-network
+    networks:
+      default:
+        aliases:
+          - docker
 
     expose:
       # 分享預設的安全 TLS port，讓在 vm-network 的 Jenkins 可以存取
       - "2376"
 
+volumes:
+  docker-daemon_data:
+    external: true
+
 networks:
   default:
-    name: vm-network
+    name: rd-lab-network
     external: true

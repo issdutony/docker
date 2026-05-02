@@ -1,0 +1,53 @@
+pipeline {
+    agent {
+        label 'dind-agent'
+    }
+
+    options {
+        lock(resource: "lock-${JOB_NAME}")
+        disableConcurrentBuilds()
+        skipDefaultCheckout()
+        buildDiscarder(logRotator(numToKeepStr: '5', artifactNumToKeepStr: '5'))
+    // timestamps()
+    }
+
+    environment {
+        CACHE_DIR = "/home/jenkins/cache/${JOB_NAME}/.nuget/packages"
+        SRC_DIR = '/home/jenkins/src/InventoryApp'
+        PROJECT_PATH = 'InventoryApp.sln' // 替換成你的方案或專案檔路徑
+    }
+    stages {
+        stage('Restore') {
+            steps {
+                script {
+                    def String dockerImage = 'rd/mcr.microsoft.com/dotnet/sdk:10.0'
+                    def String dockerArgs = [
+                        "-v ${SRC_DIR}:${SRC_DIR}",
+                        "-v ${CACHE_DIR}:${CACHE_DIR}",
+                        '--network host'
+                    ].join(' ')
+
+                    docker.image(dockerImage).inside(dockerArgs) {
+                        withSonarQubeEnv('sonar-server') {
+                            sh '''
+                            cp -a ${SRC_DIR}/. ${WORKSPACE}/
+                            dotnet clean ${PROJECT_PATH}
+                            dotnet restore ${PROJECT_PATH}
+                            dotnet build ${PROJECT_PATH} --configuration Release --no-restore
+                            dotnet test ${PROJECT_PATH} --configuration Release --no-restore
+                            dotnet publish ${PROJECT_PATH} --configuration Release --output ./publish
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            // 存檔產出的二進位檔案
+            archiveArtifacts artifacts: 'publish/**', allowEmptyArchive: true
+        }
+    }
+}
