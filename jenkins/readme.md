@@ -8,6 +8,9 @@
 - CACHE_DIR : `/home/jenkins/cache`
 - SRC_DIR : `/home/jenkins/src`
 
+
+[jenkins/jenkins-server/docker-compose.yaml](https://raw.githubusercontent.com/issdutony/docker/refs/heads/main/jenkins/jenkins-server/docker-compose.yaml)
+
 ```yaml
 name: jenkins
 
