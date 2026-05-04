@@ -2,7 +2,7 @@
 
 ## Docker Compose
 
-- [`docker-compose.yaml`](docker-compose.yaml)
+- [`portainer-compose.yaml`](portainer-compose.yaml)
 
 ## Setting
 
