@@ -1,5 +1,3 @@
-name: rd-lab
-
 services:
   portainer:
     image: portainer/portainer-ce:sts
@@ -9,14 +7,11 @@ services:
 
     restart: always
 
-    environment:
-      - TZ=Asia/Taipei # 設定時區環境變數
-
     volumes:
-      - portainer_data:/data
       - /var/run/docker.sock:/var/run/docker.sock
-      - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
+      - portainer_data:/data
+      # - /etc/localtime:/etc/localtime:ro
+      # - /etc/timezone:/etc/timezone:ro
 
     ports:
       - 9443:9443
@@ -28,5 +23,9 @@ volumes:
 
 networks:
   default:
-    name: rd-lab-network
-    external: true
+    name: portainer_network
+
+# networks:
+#   default:
+#     name: rd-lab-network
+#     external: true
